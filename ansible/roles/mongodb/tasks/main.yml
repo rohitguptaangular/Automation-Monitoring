@@ -2,59 +2,49 @@
 # =============================================================
 # roles/mongodb/tasks/main.yml
 # PURPOSE: Install, configure, and secure MongoDB on the DB server.
-#
-# WHAT THIS DOES (in order):
-#   1. Add the official MongoDB repository (always install from official source)
-#   2. Install MongoDB
-#   3. Configure MongoDB to listen on the right network interface
-#   4. Start and enable the MongoDB service
-#   5. Create admin and application users
-#   6. Enable authentication
 # =============================================================
 
-# Step 1: Install required packages for adding MongoDB's repo
 - name: Install prerequisite packages
   apt:
     name:
       - gnupg
       - curl
       - apt-transport-https
+      - python3-pymongo
     state: present
     update_cache: yes
 
-# Step 2: Add MongoDB's official GPG signing key
-# GPG keys verify that packages come from the real MongoDB, not a hacker
-- name: Add MongoDB GPG signing key
-  apt_key:
-    url: https://www.mongodb.org/static/pgp/server-7.0.asc
+- name: Add MongoDB 7.0 repository with GPG key
+  deb822_repository:
+    name: mongodb-org-7.0
+    types: deb
+    uris: https://repo.mongodb.org/apt/ubuntu
+    suites: jammy/mongodb-org/7.0
+    components: multiverse
+    architectures: amd64
+    signed_by: https://www.mongodb.org/static/pgp/server-7.0.asc
     state: present
+  register: mongo_repo
 
-# Step 3: Add MongoDB's official package repository
-- name: Add MongoDB repository
-  apt_repository:
-    repo: "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse"
-    state: present
-    filename: mongodb-org-7.0
+- name: Update apt cache after adding MongoDB repo
+  apt:
+    update_cache: yes
+  when: mongo_repo.changed
 
-# Step 4: Install MongoDB
 - name: Install MongoDB
   apt:
     name: mongodb-org
     state: present
-    update_cache: yes
 
-# Step 5: Deploy our custom MongoDB config file
-# The template uses Jinja2 syntax ({{ variable }}) to fill in values
-- name: Deploy MongoDB configuration
+- name: Deploy MongoDB configuration (auth disabled for initial setup)
   template:
     src: mongod.conf.j2
     dest: /etc/mongod.conf
     owner: root
     group: root
     mode: '0644'
-  notify: restart mongod    # If config changes, restart MongoDB automatically
+  notify: restart mongod
 
-# Step 6: Start MongoDB and enable it to start on server reboot
 - name: Start and enable MongoDB service
   systemd:
     name: mongod
@@ -62,17 +52,12 @@
     enabled: yes
     daemon_reload: yes
 
-# Step 7: Wait for MongoDB to be ready to accept connections
-# MongoDB takes a few seconds to start — we wait before trying to create users
 - name: Wait for MongoDB to be ready
   wait_for:
     port: 27017
     host: localhost
-    timeout: 30
+    timeout: 60
 
-# Step 8: Create the MongoDB admin user
-# We use the 'community.mongodb' collection's module for this.
-# The admin user has full control over all databases.
 - name: Create MongoDB admin user
   community.mongodb.mongodb_user:
     login_host: localhost
@@ -86,34 +71,38 @@
       - db: admin
         role: readWriteAnyDatabase
     state: present
+  ignore_errors: yes
 
-# Step 9: Create the application-specific database user
-# The app uses this user — it only has access to its own database.
-# This limits damage if the app credentials are ever compromised.
-- name: Create TravelMemory application database user
-  community.mongodb.mongodb_user:
-    login_host: localhost
-    login_port: 27017
-    login_user: "{{ mongodb_admin_user }}"
-    login_password: "{{ mongodb_admin_password }}"
-    database: "{{ mongodb_app_database }}"
-    name: "{{ mongodb_app_user }}"
-    password: "{{ mongodb_app_password }}"
-    roles:
-      - db: "{{ mongodb_app_database }}"
-        role: readWrite
-    state: present
+# Use mongosh directly to avoid pymongo version dependency
+- name: Create TravelMemory application database user via mongosh
+  command: >
+    mongosh admin
+    --username {{ mongodb_admin_user }}
+    --password {{ mongodb_admin_password }}
+    --eval "db.getSiblingDB('{{ mongodb_app_database }}').createUser({
+      user: '{{ mongodb_app_user }}',
+      pwd: '{{ mongodb_app_password }}',
+      roles: [{ role: 'readWrite', db: '{{ mongodb_app_database }}' }]
+    })"
+  register: create_user
+  changed_when: "'already exists' not in create_user.stderr"
+  failed_when: false
 
-# Step 10: Re-deploy config with authentication enabled
-# We do this AFTER creating users, because if we enable auth first,
-# we can't create users without credentials (chicken-and-egg problem)
-- name: Enable MongoDB authentication in config
-  template:
-    src: mongod.conf.j2
-    dest: /etc/mongod.conf
-    owner: root
-    group: root
-    mode: '0644'
-  vars:
-    mongodb_auth_enabled: true
+# Enable authentication by adding the security block to mongod.conf
+- name: Enable MongoDB authentication
+  blockinfile:
+    path: /etc/mongod.conf
+    block: |
+      security:
+        authorization: enabled
+    marker: "# {mark} ANSIBLE MANAGED - AUTH"
   notify: restart mongod
+
+- name: Flush handlers to restart MongoDB with auth enabled
+  meta: flush_handlers
+
+- name: Wait for MongoDB to be ready after restart
+  wait_for:
+    port: 27017
+    host: localhost
+    timeout: 60

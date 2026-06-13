@@ -1,35 +1,14 @@
-# =============================================================
-# mongod.conf.j2 — Jinja2 Template for MongoDB Configuration
-# Ansible fills in {{ variables }} before copying this to the server.
-# =============================================================
-
-# Where MongoDB stores its data files
 storage:
   dbPath: /var/lib/mongodb
-  journal:
-    enabled: true
 
-# Logging configuration
 systemLog:
   destination: file
   logAppend: true
   path: /var/log/mongodb/mongod.log
 
-# Network settings
 net:
   port: 27017
-  # IMPORTANT: Bind to all interfaces so the web server can connect.
-  # The security group (firewall) restricts WHO can reach port 27017.
-  # Only the web server's security group is allowed — so binding to
-  # 0.0.0.0 here is safe because the network-level firewall protects us.
   bindIp: 0.0.0.0
 
-# Process management
 processManagement:
   timeZoneInfo: /usr/share/zoneinfo
-
-# Security — enable authentication
-{% if mongodb_auth_enabled | default(false) %}
-security:
-  authorization: enabled
-{% endif %}
