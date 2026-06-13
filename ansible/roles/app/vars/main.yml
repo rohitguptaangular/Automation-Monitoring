@@ -1,0 +1,16 @@
+---
+# =============================================================
+# roles/app/vars/main.yml
+# PURPOSE: Variables for the app deployment role.
+# These are passed in from the playbook or set here as defaults.
+# =============================================================
+
+# These MUST be overridden from the playbook with actual IPs
+# from Terraform output
+db_private_ip: "REPLACE_WITH_DB_PRIVATE_IP"
+web_public_ip: "REPLACE_WITH_WEB_PUBLIC_IP"
+
+# Must match the MongoDB role vars
+mongodb_app_user: "travelmemory_user"
+mongodb_app_password: "ChangeMe_AppPassword_456!"
+mongodb_app_database: "travelmemory"

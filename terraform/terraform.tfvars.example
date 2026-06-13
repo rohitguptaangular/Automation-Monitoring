@@ -1,0 +1,32 @@
+# =============================================================
+# terraform.tfvars.example
+# PURPOSE: Template for your personal Terraform values.
+#
+# HOW TO USE:
+#   1. Copy this file:  cp terraform.tfvars.example terraform.tfvars
+#   2. Fill in YOUR values below
+#   3. NEVER commit terraform.tfvars to Git (it's in .gitignore)
+# =============================================================
+
+# AWS region — us-east-1 is recommended (cheapest, most services)
+aws_region = "us-east-1"
+
+# A name prefix used on all AWS resources (keep it short, lowercase)
+project_name = "travelmemory"
+
+# Your public IP address — run this command to find it:
+#   curl ifconfig.me
+# Then paste the result below (without /32, we add that automatically)
+my_ip = "YOUR_PUBLIC_IP_HERE"
+
+# The name of your SSH key pair in AWS.
+# To create one:
+#   AWS Console → EC2 → Key Pairs → Create key pair
+#   Download the .pem file, move it to ~/.ssh/
+#   chmod 400 ~/.ssh/your-key-name.pem
+key_pair_name = "your-key-pair-name"
+
+# Leave these as defaults unless you have a reason to change them
+aws_region          = "us-east-1"
+availability_zone   = "us-east-1a"
+instance_type       = "t2.micro"

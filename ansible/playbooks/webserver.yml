@@ -1,0 +1,56 @@
+---
+# =============================================================
+# webserver.yml
+# PURPOSE: Configure the web server — install Node.js and deploy the app.
+# Run this AFTER dbserver.yml.
+#
+# Run with:
+#   ansible-playbook playbooks/webserver.yml -i inventory/aws_hosts.ini \
+#     --extra-vars "db_private_ip=10.0.2.X web_public_ip=1.2.3.4"
+#
+# Replace 10.0.2.X with your DB's private IP (from terraform output)
+# Replace 1.2.3.4 with your web server's public IP (from terraform output)
+# =============================================================
+
+- name: Configure Web Server
+  hosts: webservers     # Targets the [webservers] group in inventory
+  become: yes
+
+  vars:
+    # These are passed via --extra-vars or set here
+    # Override them with actual Terraform output values!
+    db_private_ip: "{{ db_private_ip | default('REPLACE_ME') }}"
+    web_public_ip: "{{ web_public_ip | default('REPLACE_ME') }}"
+
+  pre_tasks:
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+  roles:
+    - nodejs    # Install Node.js, NPM, PM2, Git
+    - app       # Clone repo, configure, start with PM2
+
+  post_tasks:
+    - name: Check PM2 process status
+      command: pm2 list
+      become_user: ubuntu
+      register: pm2_list
+      changed_when: false
+
+    - name: Display running processes
+      debug:
+        msg: "{{ pm2_list.stdout_lines }}"
+
+    - name: Verify backend is responding
+      uri:
+        url: "http://localhost:3001"
+        status_code: [200, 404]    # 404 is OK — means server is up but route not found
+        timeout: 10
+      register: backend_check
+      failed_when: false
+
+    - name: Backend health check result
+      debug:
+        msg: "Backend responded with status {{ backend_check.status | default('no response') }}"

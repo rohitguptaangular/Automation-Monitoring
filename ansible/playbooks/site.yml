@@ -1,0 +1,19 @@
+---
+# =============================================================
+# site.yml — Master Playbook
+# PURPOSE: Run ALL playbooks in the correct order.
+# This is a convenience shortcut — instead of running each
+# playbook separately, run just this one file.
+#
+# Run with:
+#   ansible-playbook playbooks/site.yml -i inventory/aws_hosts.ini \
+#     --extra-vars "db_private_ip=10.0.2.X web_public_ip=1.2.3.4"
+# =============================================================
+
+# Import plays in the correct order:
+# 1. Database first (so MongoDB is ready when the app starts)
+# 2. Web server second
+
+- import_playbook: dbserver.yml
+
+- import_playbook: webserver.yml

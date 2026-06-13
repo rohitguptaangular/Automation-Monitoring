@@ -1,0 +1,42 @@
+# =============================================================
+# .gitignore — Files that should NEVER go into Git
+# =============================================================
+
+# ---------------------------------------------------------------
+# macOS system files
+# ---------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ---------------------------------------------------------------
+# Terraform — sensitive and generated files
+# ---------------------------------------------------------------
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfplan
+
+# ---------------------------------------------------------------
+# Ansible — sensitive files
+# ---------------------------------------------------------------
+ansible/*.retry
+ansible/vault_password.txt
+
+# ---------------------------------------------------------------
+# SSH keys — NEVER commit these!
+# ---------------------------------------------------------------
+*.pem
+*.ppk
+id_rsa
+id_rsa.pub
+
+# ---------------------------------------------------------------
+# Editor files
+# ---------------------------------------------------------------
+*.swp
+*.swo
+.vscode/
+.idea/

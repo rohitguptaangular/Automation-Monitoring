@@ -1,0 +1,40 @@
+---
+# =============================================================
+# dbserver.yml
+# PURPOSE: Configure the database server.
+# Run this FIRST (before webserver.yml) so MongoDB is ready
+# when the app tries to connect.
+#
+# Run with:
+#   ansible-playbook playbooks/dbserver.yml -i inventory/aws_hosts.ini
+# =============================================================
+
+- name: Configure Database Server
+  hosts: dbservers      # Targets the [dbservers] group in inventory
+  become: yes           # Run tasks as root (sudo) — needed to install packages
+
+  # Install the MongoDB Ansible collection before running roles
+  # (normally you'd run: ansible-galaxy collection install community.mongodb)
+  pre_tasks:
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600    # Only update if cache is older than 1 hour
+
+    - name: Install python3-pymongo (required for MongoDB Ansible modules)
+      apt:
+        name: python3-pymongo
+        state: present
+
+  roles:
+    - mongodb    # Runs roles/mongodb/tasks/main.yml
+
+  post_tasks:
+    - name: Verify MongoDB is running
+      systemd:
+        name: mongod
+      register: mongod_status
+
+    - name: Show MongoDB status
+      debug:
+        msg: "MongoDB is {{ mongod_status.status.ActiveState }}"

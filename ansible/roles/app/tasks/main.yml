@@ -1,0 +1,128 @@
+---
+# =============================================================
+# roles/app/tasks/main.yml
+# PURPOSE: Clone, configure, and start the TravelMemory MERN app.
+#
+# TravelMemory repo structure:
+#   /backend  → Express.js API (connects to MongoDB, runs on port 3001)
+#   /frontend → React app (talks to backend, runs on port 3000)
+# =============================================================
+
+# Step 1: Create app directory
+- name: Create application directory
+  file:
+    path: /opt/travelmemory
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+# Step 2: Clone the TravelMemory repository
+- name: Clone TravelMemory repository
+  git:
+    repo: https://github.com/UnpredictablePrashant/TravelMemory.git
+    dest: /opt/travelmemory
+    version: main
+    force: yes
+  become_user: ubuntu
+
+# ---------------------------------------------------------------
+# BACKEND SETUP
+# ---------------------------------------------------------------
+
+# Step 3: Create backend .env file
+# Environment variables pass configuration to Node.js without
+# hardcoding sensitive data (passwords, IPs) in the code.
+- name: Create backend .env file
+  template:
+    src: backend.env.j2
+    dest: /opt/travelmemory/backend/.env
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'    # Only owner can read — protects the MongoDB password
+
+# Step 4: Install backend Node.js dependencies
+# npm install reads package.json and downloads all required packages
+- name: Install backend npm dependencies
+  npm:
+    path: /opt/travelmemory/backend
+    state: present
+  become_user: ubuntu
+
+# Step 5: Start backend with PM2
+# PM2 gives the process a name ("travelmemory-backend") so you can
+# manage it with: pm2 logs travelmemory-backend, pm2 restart, etc.
+- name: Start backend with PM2
+  command: pm2 start index.js --name travelmemory-backend
+  args:
+    chdir: /opt/travelmemory/backend
+  become_user: ubuntu
+  register: pm2_start
+  # Don't fail if already running — we'll use restart instead
+  failed_when: false
+
+- name: Restart backend if already running
+  command: pm2 restart travelmemory-backend
+  become_user: ubuntu
+  when: pm2_start.rc != 0
+  failed_when: false
+
+# ---------------------------------------------------------------
+# FRONTEND SETUP
+# ---------------------------------------------------------------
+
+# Step 6: Create frontend .env file
+# React uses REACT_APP_ prefixed variables.
+# VITE_BACKEND_URL tells the React app where the API is.
+- name: Create frontend environment config
+  template:
+    src: frontend.env.j2
+    dest: /opt/travelmemory/frontend/.env
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+# Step 7: Install frontend dependencies
+- name: Install frontend npm dependencies
+  npm:
+    path: /opt/travelmemory/frontend
+    state: present
+  become_user: ubuntu
+
+# Step 8: Build the React app for production
+# "npm run build" compiles React JSX into plain HTML/CSS/JS
+# that any browser can run. The output goes to the /build folder.
+- name: Build React frontend for production
+  command: npm run build
+  args:
+    chdir: /opt/travelmemory/frontend
+  become_user: ubuntu
+  environment:
+    CI: "false"    # Don't treat warnings as errors during build
+
+# Step 9: Install serve — a simple static file server for the React build
+- name: Install serve to host React build
+  npm:
+    name: serve
+    global: yes
+    state: present
+
+# Step 10: Start React frontend with PM2
+- name: Start React frontend with PM2
+  command: pm2 start serve --name travelmemory-frontend -- -s build -l 3000
+  args:
+    chdir: /opt/travelmemory/frontend
+  become_user: ubuntu
+  register: pm2_frontend
+  failed_when: false
+
+- name: Restart frontend if already running
+  command: pm2 restart travelmemory-frontend
+  become_user: ubuntu
+  when: pm2_frontend.rc != 0
+  failed_when: false
+
+# Step 11: Save PM2 process list so it survives reboots
+- name: Save PM2 process list
+  command: pm2 save
+  become_user: ubuntu

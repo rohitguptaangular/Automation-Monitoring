@@ -1,0 +1,12 @@
+---
+# =============================================================
+# handlers/main.yml
+# PURPOSE: Handlers run ONLY when notified by a task.
+# If no task says "notify: restart mongod", this never runs.
+# This prevents unnecessary restarts.
+# =============================================================
+
+- name: restart mongod
+  systemd:
+    name: mongod
+    state: restarted

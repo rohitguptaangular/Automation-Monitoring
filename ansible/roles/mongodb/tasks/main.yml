@@ -1,0 +1,119 @@
+---
+# =============================================================
+# roles/mongodb/tasks/main.yml
+# PURPOSE: Install, configure, and secure MongoDB on the DB server.
+#
+# WHAT THIS DOES (in order):
+#   1. Add the official MongoDB repository (always install from official source)
+#   2. Install MongoDB
+#   3. Configure MongoDB to listen on the right network interface
+#   4. Start and enable the MongoDB service
+#   5. Create admin and application users
+#   6. Enable authentication
+# =============================================================
+
+# Step 1: Install required packages for adding MongoDB's repo
+- name: Install prerequisite packages
+  apt:
+    name:
+      - gnupg
+      - curl
+      - apt-transport-https
+    state: present
+    update_cache: yes
+
+# Step 2: Add MongoDB's official GPG signing key
+# GPG keys verify that packages come from the real MongoDB, not a hacker
+- name: Add MongoDB GPG signing key
+  apt_key:
+    url: https://www.mongodb.org/static/pgp/server-7.0.asc
+    state: present
+
+# Step 3: Add MongoDB's official package repository
+- name: Add MongoDB repository
+  apt_repository:
+    repo: "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse"
+    state: present
+    filename: mongodb-org-7.0
+
+# Step 4: Install MongoDB
+- name: Install MongoDB
+  apt:
+    name: mongodb-org
+    state: present
+    update_cache: yes
+
+# Step 5: Deploy our custom MongoDB config file
+# The template uses Jinja2 syntax ({{ variable }}) to fill in values
+- name: Deploy MongoDB configuration
+  template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart mongod    # If config changes, restart MongoDB automatically
+
+# Step 6: Start MongoDB and enable it to start on server reboot
+- name: Start and enable MongoDB service
+  systemd:
+    name: mongod
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+# Step 7: Wait for MongoDB to be ready to accept connections
+# MongoDB takes a few seconds to start — we wait before trying to create users
+- name: Wait for MongoDB to be ready
+  wait_for:
+    port: 27017
+    host: localhost
+    timeout: 30
+
+# Step 8: Create the MongoDB admin user
+# We use the 'community.mongodb' collection's module for this.
+# The admin user has full control over all databases.
+- name: Create MongoDB admin user
+  community.mongodb.mongodb_user:
+    login_host: localhost
+    login_port: 27017
+    database: admin
+    name: "{{ mongodb_admin_user }}"
+    password: "{{ mongodb_admin_password }}"
+    roles:
+      - db: admin
+        role: userAdminAnyDatabase
+      - db: admin
+        role: readWriteAnyDatabase
+    state: present
+
+# Step 9: Create the application-specific database user
+# The app uses this user — it only has access to its own database.
+# This limits damage if the app credentials are ever compromised.
+- name: Create TravelMemory application database user
+  community.mongodb.mongodb_user:
+    login_host: localhost
+    login_port: 27017
+    login_user: "{{ mongodb_admin_user }}"
+    login_password: "{{ mongodb_admin_password }}"
+    database: "{{ mongodb_app_database }}"
+    name: "{{ mongodb_app_user }}"
+    password: "{{ mongodb_app_password }}"
+    roles:
+      - db: "{{ mongodb_app_database }}"
+        role: readWrite
+    state: present
+
+# Step 10: Re-deploy config with authentication enabled
+# We do this AFTER creating users, because if we enable auth first,
+# we can't create users without credentials (chicken-and-egg problem)
+- name: Enable MongoDB authentication in config
+  template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    mongodb_auth_enabled: true
+  notify: restart mongod

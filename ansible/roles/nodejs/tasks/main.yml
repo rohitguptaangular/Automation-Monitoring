@@ -1,0 +1,72 @@
+---
+# =============================================================
+# roles/nodejs/tasks/main.yml
+# PURPOSE: Install Node.js and NPM on the web server.
+#
+# We install Node.js v20 LTS (Long Term Support) from the
+# official NodeSource repository. This is better than Ubuntu's
+# default apt package which is often outdated.
+# =============================================================
+
+# Step 1: Install curl (needed to download the NodeSource setup script)
+- name: Install curl
+  apt:
+    name: curl
+    state: present
+    update_cache: yes
+
+# Step 2: Download and run the NodeSource setup script
+# This adds the Node.js 20.x repository to apt
+- name: Add NodeSource repository for Node.js 20.x
+  shell: |
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+  # "creates" means: only run this if the file doesn't exist yet (idempotent)
+
+# Step 3: Install Node.js (npm comes bundled with it)
+- name: Install Node.js and NPM
+  apt:
+    name: nodejs
+    state: present
+    update_cache: yes
+
+# Step 4: Verify installation — useful for debugging
+- name: Verify Node.js version
+  command: node --version
+  register: node_version
+  changed_when: false    # This task never "changes" anything, just reads
+
+- name: Display Node.js version
+  debug:
+    msg: "Node.js version installed: {{ node_version.stdout }}"
+
+- name: Verify NPM version
+  command: npm --version
+  register: npm_version
+  changed_when: false
+
+- name: Display NPM version
+  debug:
+    msg: "NPM version installed: {{ npm_version.stdout }}"
+
+# Step 5: Install PM2 — a process manager for Node.js
+# PM2 keeps your Node.js app running in the background and
+# automatically restarts it if it crashes or the server reboots.
+- name: Install PM2 process manager globally
+  npm:
+    name: pm2
+    global: yes
+    state: present
+
+# Step 6: Configure PM2 to start on system reboot
+- name: Configure PM2 to start on boot
+  command: pm2 startup systemd -u ubuntu --hp /home/ubuntu
+  register: pm2_startup
+  changed_when: "'systemctl' in pm2_startup.stdout"
+
+# Step 7: Install git (needed to clone the app repository)
+- name: Install git
+  apt:
+    name: git
+    state: present

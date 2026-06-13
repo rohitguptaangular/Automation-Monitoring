@@ -1,0 +1,18 @@
+---
+# =============================================================
+# vars/main.yml
+# PURPOSE: Default variable values for the MongoDB role.
+#
+# ⚠️  SECURITY: Change these passwords before deploying!
+# In a real project, store secrets in Ansible Vault:
+#   ansible-vault encrypt_string 'your-password' --name 'mongodb_admin_password'
+# =============================================================
+
+mongodb_admin_user: "mongoadmin"
+mongodb_admin_password: "ChangeMe_AdminPassword_123!"
+
+mongodb_app_database: "travelmemory"
+mongodb_app_user: "travelmemory_user"
+mongodb_app_password: "ChangeMe_AppPassword_456!"
+
+mongodb_auth_enabled: false    # Set to true after users are created
